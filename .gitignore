@@ -1,0 +1,20 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Dependency directories
+node_modules/
+extra/
+
+# Environment variables
+.env
+.env.test
+
+# Build/Dist folders
+dist/
+.next/
+
+.env
+.env.local
+.env.*.local
