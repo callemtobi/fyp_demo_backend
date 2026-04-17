@@ -37,6 +37,18 @@ const evidenceSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  userSignedTxHash: {
+    type: String,
+    default: null, // Transaction signed by user wallet
+  },
+  userSignedBlockNumber: {
+    type: Number,
+    default: null,
+  },
+  userSignedTimestamp: {
+    type: Date,
+    default: null,
+  },
   uploader: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",

@@ -14,6 +14,7 @@ import {
   getEvidenceById,
   downloadEvidence,
   updateBlockchainHash,
+  confirmBlockchainTransaction,
   trackEvidenceView,
   trackEvidenceDownload,
   getChainOfCustody,
@@ -158,6 +159,7 @@ router.get("/", getAllEvidence);
 router.get("/:id", getEvidenceById);
 router.get("/:id/download", downloadEvidence);
 router.put("/:id/blockchain", updateBlockchainHash);
+router.post("/:id/confirm-blockchain", confirmBlockchainTransaction);
 
 // Chain of Custody routes
 router.post("/:id/track-view", trackEvidenceView);

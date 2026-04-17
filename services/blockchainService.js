@@ -182,10 +182,53 @@ const getTransactionReceipt = async (txHash) => {
   }
 };
 
+/**
+ * Verify user-signed transaction on blockchain
+ */
+const verifyUserTransaction = async (transactionHash, ipfsHash, fileHash) => {
+  try {
+    console.log("🔍 Verifying user-signed transaction...");
+    console.log("   Transaction Hash:", transactionHash);
+
+    // Get transaction receipt
+    const receipt = await provider.getTransactionReceipt(transactionHash);
+
+    if (!receipt) {
+      return {
+        success: false,
+        error: "Transaction not found on blockchain",
+      };
+    }
+
+    console.log("✅ Transaction verified");
+    console.log("   Block Number:", receipt.blockNumber);
+    console.log("   Status:", receipt.status === 1 ? "Success" : "Failed");
+    console.log("   Gas Used:", receipt.gasUsed.toString());
+
+    return {
+      success: true,
+      transactionHash: transactionHash,
+      blockNumber: receipt.blockNumber,
+      blockTimestamp: receipt.timestamp,
+      gasUsed: receipt.gasUsed.toString(),
+      status: receipt.status === 1 ? "success" : "failed",
+      from: receipt.from,
+      to: receipt.to,
+    };
+  } catch (error) {
+    console.error("❌ Transaction verification error:", error);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+};
+
 export {
   registerEvidence,
   verifyEvidence,
   logEvidenceView,
   checkBalance,
   getTransactionReceipt,
+  verifyUserTransaction,
 };

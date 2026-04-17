@@ -86,6 +86,7 @@ const uploadEvidence = async (req, res) => {
       message: "Evidence uploaded successfully",
       data: {
         evidence: {
+          _id: evidence._id,
           evidenceId: evidence.evidenceId,
           ipfsHash: evidence.ipfsHash,
           fileHash: evidence.fileHash,
@@ -384,12 +385,135 @@ const updateBlockchainHash = async (req, res) => {
   }
 };
 
+/**
+ * Confirm user-signed blockchain transaction
+ */
+const confirmBlockchainTransaction = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { transactionHash, blockNumber } = req.body;
+
+    console.log("🔗 Confirming blockchain transaction...");
+    console.log("   Evidence ID:", id);
+    console.log("   TX Hash:", transactionHash);
+    console.log("   Block Number:", blockNumber);
+
+    if (!transactionHash) {
+      return res.status(400).json({
+        success: false,
+        message: "Transaction hash is required",
+      });
+    }
+
+    // Find evidence record
+    const evidence = await Evidence.findById(id);
+
+    if (!evidence) {
+      console.error("❌ Evidence not found with ID:", id);
+      return res.status(404).json({
+        success: false,
+        message: "Evidence not found",
+      });
+    }
+
+    console.log("✅ Evidence found:", evidence.fileName);
+    console.log("   IPFS Hash:", evidence.ipfsHash);
+    console.log("   File Hash:", evidence.fileHash);
+
+    // Import blockchainService function
+    console.log("📥 Importing blockchainService...");
+    const blockchainModule = await import("../services/blockchainService.js");
+    const verifyUserTransaction = blockchainModule.verifyUserTransaction;
+
+    console.log("🔍 Verifying transaction on blockchain...");
+
+    // Verify transaction on blockchain
+    const verifyResult = await verifyUserTransaction(
+      transactionHash,
+      evidence.ipfsHash,
+      evidence.fileHash,
+    );
+
+    if (!verifyResult.success) {
+      console.error("❌ Transaction verification failed:", verifyResult.error);
+      return res.status(400).json({
+        success: false,
+        message: "Transaction verification failed",
+        error: verifyResult.error,
+      });
+    }
+
+    console.log("✅ Transaction verified on blockchain");
+    console.log("   Block:", verifyResult.blockNumber);
+    console.log("   Gas Used:", verifyResult.gasUsed);
+
+    // Update evidence with user-signed transaction details
+    const updatedEvidence = await Evidence.findByIdAndUpdate(
+      id,
+      {
+        userSignedTxHash: transactionHash,
+        userSignedBlockNumber: blockNumber || verifyResult.blockNumber,
+        userSignedTimestamp: new Date(),
+        blockchainConfirmed: true,
+        $push: {
+          chainOfCustody: {
+            user: req.user.id,
+            userId: req.user.id,
+            userName: req.user.name,
+            userEmail: req.user.email,
+            action: "blockchain-confirmed",
+            timestamp: new Date(),
+            txHash: transactionHash,
+            ipAddress: req.ip || req.connection.remoteAddress,
+            userAgent: req.get("user-agent"),
+            reason: "Evidence registered on Polygon Amoy blockchain",
+          },
+        },
+      },
+      { new: true },
+    )
+      .populate("uploader", "name email")
+      .populate("caseId", "caseTitle");
+
+    console.log("✅ User-signed transaction confirmed:");
+    console.log("   Evidence ID:", id);
+    console.log("   TX Hash:", transactionHash);
+    console.log("   Block Number:", blockNumber);
+
+    res.status(200).json({
+      success: true,
+      message: "Blockchain transaction confirmed",
+      data: {
+        evidence: {
+          evidenceId: updatedEvidence.evidenceId,
+          ipfsHash: updatedEvidence.ipfsHash,
+          fileHash: updatedEvidence.fileHash,
+          userSignedTxHash: updatedEvidence.userSignedTxHash,
+          userSignedBlockNumber: updatedEvidence.userSignedBlockNumber,
+          blockchainExplorer: `https://amoy.polygonscan.com/tx/${transactionHash}`,
+        },
+        verification: verifyResult,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error confirming blockchain transaction:", error);
+    console.error("   Error message:", error.message);
+    console.error("   Error stack:", error.stack);
+    res.status(500).json({
+      success: false,
+      message: "Error confirming blockchain transaction",
+      error: error.message,
+    });
+  }
+};
+
 export {
   uploadEvidence,
   getAllEvidence,
   getEvidenceById,
   downloadEvidence,
   updateBlockchainHash,
+  confirmBlockchainTransaction,
   trackEvidenceView,
   trackEvidenceDownload,
   getChainOfCustody,
