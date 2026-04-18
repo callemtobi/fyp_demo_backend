@@ -145,4 +145,35 @@ export const getUser = async (req, res) => {
   }
 };
 
-export default { register, login, getUser };
+/**
+ * Logout user
+ * POST /api/auth/logout
+ */
+export const logout = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+
+    if (userId) {
+      // Update user's last logout timestamp
+      await User.findByIdAndUpdate(userId, {
+        lastLogout: Date.now(),
+      });
+
+      console.log(`User ${userId} logged out successfully`);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Logout successful",
+    });
+  } catch (error) {
+    console.error("Logout error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error logging out",
+      error: error.message,
+    });
+  }
+};
+
+export default { register, login, getUser, logout };

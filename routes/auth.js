@@ -1,5 +1,10 @@
 import express from "express";
-import { register, login, getUser } from "../controllers/authController.js";
+import {
+  register,
+  login,
+  getUser,
+  logout,
+} from "../controllers/authController.js";
 import { protect } from "../middleware/auth.js";
 
 const router = express.Router();
@@ -10,5 +15,6 @@ router.post("/login", login);
 
 // Protected routes
 router.get("/getUser", protect, getUser);
+router.post("/logout", protect, logout);
 
 export default router;
