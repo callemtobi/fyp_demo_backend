@@ -1,5 +1,6 @@
 import Case from "../models/Case.js";
 import Evidence from "../models/Evidence.js";
+// import { generateCaseAnalysisSummary } from "../services/openaiService.js";
 
 /**
  * Create a new case
@@ -10,9 +11,14 @@ const createCase = async (req, res) => {
     const {
       title,
       description,
+      jurisdiction,
+      assignedOfficer,
       caseType,
-      priority,
-      assignedInvestigators,
+      status,
+      crime,
+      victim,
+      witness,
+      suspect,
       tags,
       metadata,
     } = req.body;
@@ -28,37 +34,46 @@ const createCase = async (req, res) => {
       });
     }
 
+    if (!jurisdiction || jurisdiction.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Jurisdiction is required",
+      });
+    }
+
     if (!description || description.trim() === "") {
       return res.status(400).json({
         success: false,
-        message: "Case description is required",
+        message: "Description is required",
       });
     }
 
-    if (!caseType) {
-      return res.status(400).json({
-        success: false,
-        message: "Case type is required",
-      });
-    }
-
-    // Validate case type
     const validCaseTypes = ["criminal", "civil", "corporate", "cyber", "other"];
-    if (!validCaseTypes.includes(caseType)) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid case type. Must be one of: ${validCaseTypes.join(", ")}`,
-      });
-    }
+    const normalizedCaseType = validCaseTypes.includes(caseType)
+      ? caseType
+      : "other";
+    const validStatuses = [
+      "open",
+      "in-progress",
+      "closed",
+      "archived",
+      "suspended",
+    ];
+    const normalizedStatus = validStatuses.includes(status) ? status : "open";
 
     // Create case (caseNumber will be auto-generated)
     const newCase = await Case.create({
       title: title.trim(),
-      description: description.trim(),
-      caseType,
-      priority: priority || "medium",
-      leadInvestigator: req.user.id, // From auth middleware
-      assignedInvestigators: assignedInvestigators || [],
+      description: (description || "").trim(),
+      jurisdiction: jurisdiction.trim(),
+      caseType: normalizedCaseType,
+      status: normalizedStatus,
+      assignedOfficer: assignedOfficer || null,
+      crime: crime || {},
+      victim: victim || {},
+      witness: witness || {},
+      suspect: suspect || {},
+      evidence: [],
       tags: tags || [],
       metadata: metadata || {},
       // DO NOT include caseNumber here - let the schema generate it
@@ -70,20 +85,38 @@ const createCase = async (req, res) => {
     newCase.timeline.push({
       event: "Case Created",
       date: new Date(),
-      description: `Case created by ${req.user.username}`,
+      description: `Case created by ${req.user.username || req.user.name || "user"}`,
       recordedBy: req.user.id,
     });
+
+    // Generate AI analysis summary using OpenAI
+    // console.log("🔄 Generating case analysis summary with OpenAI...");
+    // const analysisSummary = await generateCaseAnalysisSummary(
+    //   newCase.toObject(),
+    // );
+    // if (analysisSummary) {
+    //   newCase.caseAnalysisSummary = analysisSummary;
+    //   console.log("✅ Case analysis summary generated and stored");
+    // } else {
+    //   console.log(
+    //     "⚠️ Failed to generate case analysis summary, continuing without it",
+    //   );
+    // }
 
     await newCase.save();
 
     // Populate user references before sending response
-    await newCase.populate("leadInvestigator", "username email role");
-    await newCase.populate("assignedInvestigators", "username email role");
+    await newCase.populate("assignedOfficer", "username email role");
+
+    // NOTE: We intentionally do NOT return the caseAnalysisSummary in the response
+    // It's stored in the database for later use (comparisons, reports, etc.)
+    const caseResponse = newCase.toObject();
+    delete caseResponse.caseAnalysisSummary;
 
     res.status(201).json({
       success: true,
       message: "Case created successfully",
-      data: newCase,
+      data: caseResponse,
     });
   } catch (error) {
     console.error("❌ Create case error:", error);
@@ -98,18 +131,11 @@ const createCase = async (req, res) => {
 /**
  * Get all cases
  * GET /api/cases
- * Query params: status, caseType, priority, search
+ * Query params: status, caseType, search
  */
 const getAllCases = async (req, res) => {
   try {
-    const {
-      status,
-      caseType,
-      priority,
-      search,
-      limit = 50,
-      page = 1,
-    } = req.query;
+    const { status, caseType, search, limit = 50, page = 1 } = req.query;
 
     // Build filter
     const filter = {};
@@ -120,10 +146,6 @@ const getAllCases = async (req, res) => {
 
     if (caseType) {
       filter.caseType = caseType;
-    }
-
-    if (priority) {
-      filter.priority = priority;
     }
 
     // Search in title and description
@@ -143,8 +165,7 @@ const getAllCases = async (req, res) => {
 
     // Get cases with pagination
     const cases = await Case.find(filter)
-      .populate("leadInvestigator", "username email role")
-      .populate("assignedInvestigators", "username email role")
+      .populate("assignedOfficer", "username email role")
       .populate("evidence", "evidenceId fileName ipfsHash status")
       .sort({ createdAt: -1 })
       .limit(parseInt(limit))
@@ -175,15 +196,13 @@ const getAllCases = async (req, res) => {
 const getCaseById = async (req, res) => {
   try {
     const caseData = await Case.findById(req.params.id)
-      .populate("leadInvestigator", "username email role walletAddress")
-      .populate("assignedInvestigators", "username email role")
+      .populate("assignedOfficer", "username email role walletAddress")
       .populate({
         path: "evidence",
         select:
           "evidenceId fileName fileType fileSize ipfsHash fileHash status createdAt",
         options: { sort: { createdAt: -1 } },
       })
-      .populate("relatedCases.caseId", "caseNumber title status")
       .populate("timeline.recordedBy", "username");
 
     if (!caseData) {
@@ -274,11 +293,9 @@ const findSimilarCases = async (req, res) => {
     const similarCases = await Case.find({
       $or: similarityFilters,
     })
-      .populate("leadInvestigator", "username email")
+      .populate("assignedOfficer", "username email")
       .populate("evidence", "evidenceId fileName")
-      .select(
-        "caseNumber title caseType status priority metadata tags createdAt",
-      )
+      .select("caseNumber title caseType status metadata tags createdAt")
       .sort({ createdAt: -1 })
       .limit(10);
 
@@ -373,9 +390,14 @@ const updateCase = async (req, res) => {
     const {
       title,
       description,
+      jurisdiction,
       status,
-      priority,
-      assignedInvestigators,
+      assignedOfficer,
+      caseType,
+      crime,
+      victim,
+      witness,
+      suspect,
       tags,
       metadata,
     } = req.body;
@@ -394,10 +416,14 @@ const updateCase = async (req, res) => {
     // Update fields if provided
     if (title) caseData.title = title.trim();
     if (description) caseData.description = description.trim();
+    if (jurisdiction) caseData.jurisdiction = jurisdiction.trim();
     if (status) caseData.status = status;
-    if (priority) caseData.priority = priority;
-    if (assignedInvestigators)
-      caseData.assignedInvestigators = assignedInvestigators;
+    if (assignedOfficer) caseData.assignedOfficer = assignedOfficer;
+    if (caseType) caseData.caseType = caseType;
+    if (crime) caseData.crime = { ...caseData.crime, ...crime };
+    if (victim) caseData.victim = { ...caseData.victim, ...victim };
+    if (witness) caseData.witness = { ...caseData.witness, ...witness };
+    if (suspect) caseData.suspect = { ...caseData.suspect, ...suspect };
     if (tags) caseData.tags = tags;
     if (metadata) caseData.metadata = { ...caseData.metadata, ...metadata };
 
@@ -405,14 +431,13 @@ const updateCase = async (req, res) => {
     caseData.timeline.push({
       event: "Case Updated",
       date: new Date(),
-      description: `Case updated by ${req.user.username}`,
+      description: `Case updated by ${req.user.username || req.user.name || "user"}`,
       recordedBy: req.user.id,
     });
 
     await caseData.save();
 
-    await caseData.populate("leadInvestigator", "username email");
-    await caseData.populate("assignedInvestigators", "username email");
+    await caseData.populate("assignedOfficer", "username email");
 
     res.status(200).json({
       success: true,
@@ -454,12 +479,15 @@ const closeCase = async (req, res) => {
     }
 
     caseData.status = "closed";
+    caseData.metadata = caseData.metadata || {};
     caseData.metadata.closedDate = new Date();
 
     caseData.timeline.push({
       event: "Case Closed",
       date: new Date(),
-      description: findings || `Case closed by ${req.user.username}`,
+      description:
+        findings ||
+        `Case closed by ${req.user.username || req.user.name || "user"}`,
       recordedBy: req.user.id,
     });
 
@@ -554,7 +582,7 @@ const linkEvidence = async (req, res) => {
       });
     }
 
-    if (caseData.evidence.includes(evidenceId)) {
+    if (caseData.evidence.some((id) => id.toString() === evidenceId)) {
       return res.status(400).json({
         success: false,
         message: "Evidence already linked to this case",
@@ -562,7 +590,7 @@ const linkEvidence = async (req, res) => {
     }
 
     caseData.evidence.push(evidenceId);
-    evidence.caseId = caseData.caseNumber;
+    evidence.caseId = caseData._id;
     await evidence.save();
 
     caseData.timeline.push({
@@ -612,12 +640,6 @@ const getCaseStats = async (req, res) => {
         corporate: await Case.countDocuments({ caseType: "corporate" }),
         cyber: await Case.countDocuments({ caseType: "cyber" }),
         other: await Case.countDocuments({ caseType: "other" }),
-      },
-      byPriority: {
-        low: await Case.countDocuments({ priority: "low" }),
-        medium: await Case.countDocuments({ priority: "medium" }),
-        high: await Case.countDocuments({ priority: "high" }),
-        critical: await Case.countDocuments({ priority: "critical" }),
       },
     };
 
@@ -756,7 +778,6 @@ const getRecentActivity = async (req, res) => {
     });
   }
 };
-
 /**
  * Helper function to format time difference
  */

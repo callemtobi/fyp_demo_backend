@@ -3,10 +3,36 @@ import mongoose from "mongoose";
 const caseSchema = new mongoose.Schema({
   caseNumber: {
     type: String,
-    // type: mongoose.Schema.Types.ObjectId,
-    // required: true,
     unique: true,
+    required: [true, "Case number is required"],
   },
+  caseType: {
+    type: String,
+    enum: ["criminal", "civil", "corporate", "cyber", "other"],
+    default: "other",
+  },
+  status: {
+    type: String,
+    enum: ["open", "in-progress", "closed", "archived", "suspended"],
+    default: "open",
+  },
+  jurisdiction: {
+    type: String,
+    required: [true, "Jurisdiction is required"],
+    trim: true,
+  },
+  dateOpened: {
+    type: Date,
+    default: Date.now,
+    required: true,
+  },
+  assignedOfficer: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: false, // Allow the case to exist without always being assigned on creation
+  },
+
+  // Additional Case Details
   title: {
     type: String,
     required: [true, "Case title is required"],
@@ -14,54 +40,67 @@ const caseSchema = new mongoose.Schema({
   },
   description: {
     type: String,
-    required: [true, "Case description is required"],
+    required: [true, "Description is required"],
     trim: true,
   },
-  caseType: {
-    type: String,
-    enum: ["criminal", "civil", "corporate", "cyber", "other"],
-    required: true,
-  },
-  status: {
-    type: String,
-    enum: ["open", "in-progress", "closed", "archived"],
-    default: "open",
-  },
-  priority: {
-    type: String,
-    enum: ["low", "medium", "high", "critical"],
-    default: "medium",
-  },
-  leadInvestigator: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
-  },
-  assignedInvestigators: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+
+  // Optional case details from create-case frontend
+  crime: {
+    offenseType: String,
+    classification: {
+      type: String,
+      enum: ["misdemeanor", "felony", "infraction", "other"],
+      default: "misdemeanor",
     },
-  ],
+    location: String,
+    occurredAt: Date,
+  },
+  victim: {
+    fullName: String,
+    contact: {
+      phone: String,
+      email: String,
+    },
+    statement: String,
+    injuryDescription: String,
+  },
+  witness: {
+    fullName: String,
+    contact: {
+      phone: String,
+      email: String,
+    },
+    testimony: String,
+  },
+  suspect: {
+    fullName: String,
+    status: {
+      type: String,
+      enum: ["person_of_interest", "suspect", "arrested", "charged", "cleared"],
+      default: "person_of_interest",
+    },
+    alibi: String,
+    contact: {
+      phone: String,
+      email: String,
+    },
+  },
+
+  // Evidence is linked later from upload flow
   evidence: [
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Evidence",
     },
   ],
-  relatedCases: [
-    {
-      caseId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Case",
-      },
-      relationshipType: {
-        type: String,
-        enum: ["similar", "linked", "duplicate", "parent", "child"],
-      },
-      notes: String,
-    },
-  ],
+  metadata: {
+    location: String,
+    incidentDate: Date,
+    closedDate: Date,
+    notes: String,
+  },
+
+  // Timeline
   timeline: [
     {
       event: String,
@@ -83,13 +122,14 @@ const caseSchema = new mongoose.Schema({
       trim: true,
     },
   ],
-  metadata: {
-    location: String,
-    jurisdiction: String,
-    incidentDate: Date,
-    reportedDate: Date,
-    closedDate: Date,
+
+  // AI Analysis Summary
+  caseAnalysisSummary: {
+    type: String,
+    default: null,
   },
+
+  // Timestamps
   createdAt: {
     type: Date,
     default: Date.now,
@@ -100,20 +140,26 @@ const caseSchema = new mongoose.Schema({
   },
 });
 
+// Indexes for common queries
+// caseSchema.index({ caseNumber: 1 });
+caseSchema.index({ status: 1 });
+caseSchema.index({ jurisdiction: 1 });
+caseSchema.index({ dateOpened: -1 });
+caseSchema.index({ assignedOfficer: 1 });
+caseSchema.index({ caseType: 1 });
+
 // Update the updatedAt timestamp before saving
-caseSchema.pre("save", function (next) {
+caseSchema.pre("save", function () {
   this.updatedAt = Date.now();
-  // next();
 });
 
-// Generate unique case number
-caseSchema.pre("validate", async function (next) {
+// Generate unique case number if not provided
+caseSchema.pre("validate", async function () {
   if (!this.caseNumber) {
     const year = new Date().getFullYear();
     const count = await this.constructor.countDocuments();
     this.caseNumber = `CASE-${year}-${String(count + 1).padStart(5, "0")}`;
   }
-  // next();
 });
 
 export default mongoose.model("Case", caseSchema);

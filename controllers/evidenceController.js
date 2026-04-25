@@ -1,5 +1,6 @@
 import Evidence from "../models/Evidence.js";
-import { uploadToIPFS, generateFileHash } from "../services/ipfsService.js";
+import Case from "../models/Case.js";
+import { uploadToIPFS } from "../services/ipfsService.js";
 import { registerEvidence as registerOnBlockchain } from "../services/blockchainService.js";
 import fs from "fs";
 
@@ -7,105 +8,202 @@ import fs from "fs";
  * Upload evidence with blockchain registration
  */
 const uploadEvidence = async (req, res) => {
-  let uploadedFilePath = null;
+  const uploadedFilePaths = [];
+  let statusCode = 500;
 
   try {
-    if (!req.file) {
+    const uploadedFiles = req.files || [];
+
+    if (!uploadedFiles.length) {
+      statusCode = 400;
       return res.status(400).json({
         success: false,
-        message: "No file uploaded",
+        message: "No files uploaded",
       });
     }
 
-    uploadedFilePath = req.file.path;
-    const fileName = req.file.originalname;
-
-    // 1. Upload to IPFS
-    console.log("📤 Step 1: Uploading to IPFS...");
-    const ipfsResult = await uploadToIPFS(uploadedFilePath, fileName);
-
-    if (!ipfsResult.success) {
-      throw new Error("IPFS upload failed");
+    if (!req.body.caseId) {
+      statusCode = 400;
+      return res.status(400).json({
+        success: false,
+        message: "Case selection is required",
+      });
     }
 
-    const { ipfsHash, fileHash, gatewayUrl } = ipfsResult;
-
-    // 2. Register on blockchain
-    console.log("📝 Step 2: Registering on blockchain...");
-    const blockchainResult = await registerOnBlockchain(ipfsHash, fileHash);
-
-    let blockchainTxHash = null;
-    let blockchainConfirmed = false;
-
-    if (blockchainResult.success) {
-      blockchainTxHash = blockchainResult.transactionHash;
-      blockchainConfirmed = true;
-      console.log("✅ Blockchain registration complete");
-    } else {
-      console.warn(
-        "⚠️  Blockchain registration failed:",
-        blockchainResult.error,
-      );
+    const caseRecord = await Case.findById(req.body.caseId);
+    if (!caseRecord) {
+      statusCode = 404;
+      return res.status(404).json({
+        success: false,
+        message: "Selected case not found",
+      });
     }
 
-    // 3. Save to MongoDB
-    const evidence = await Evidence.create({
-      fileName: fileName,
-      fileType: req.file.mimetype,
-      fileSize: req.file.size,
-      ipfsHash: ipfsHash,
-      fileHash: fileHash,
-      blockchainTxHash: blockchainTxHash,
-      blockchainConfirmed: blockchainConfirmed,
-      uploader: req.user.id,
-      caseId: req.body.caseId || null,
-      description: req.body.description,
-      chainOfCustody: [
-        {
-          user: req.user.id,
-          userId: req.user.id,
-          userName: req.user.name,
-          userEmail: req.user.email,
-          action: "uploaded",
-          timestamp: new Date(),
-          ipAddress: req.ip || req.connection.remoteAddress,
-          userAgent: req.get("user-agent"),
+    const validMimeTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+      "image/jpg",
+      "application/pdf",
+      "video/mp4",
+      "video/webm",
+      "video/quicktime",
+    ];
+
+    const parsedTags = req.body.tags
+      ? req.body.tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+      : [];
+
+    let metadata = {};
+    let fileDurations = {};
+    try {
+      metadata = req.body.metadata ? JSON.parse(req.body.metadata) : {};
+      fileDurations = req.body.fileDurations
+        ? JSON.parse(req.body.fileDurations)
+        : {};
+    } catch (parseError) {
+      statusCode = 400;
+      throw new Error("Invalid metadata payload");
+    }
+
+    const createdEvidence = [];
+
+    for (const uploadedFile of uploadedFiles) {
+      if (!validMimeTypes.includes(uploadedFile.mimetype)) {
+        statusCode = 400;
+        throw new Error(
+          `Unsupported file type for ${uploadedFile.originalname}. Only image, PDF, and video are allowed.`,
+        );
+      }
+
+      if (uploadedFile.mimetype.startsWith("video/")) {
+        const videoDurationSeconds = Number(
+          fileDurations[uploadedFile.originalname] ?? 0,
+        );
+
+        if (!videoDurationSeconds || videoDurationSeconds > 10) {
+          statusCode = 400;
+          throw new Error(
+            `Video ${uploadedFile.originalname} must be 10 seconds or less.`,
+          );
+        }
+      }
+
+      uploadedFilePaths.push(uploadedFile.path);
+
+      const fileName = uploadedFile.originalname;
+
+      // 1. Upload to IPFS
+      console.log("📤 Step 1: Uploading to IPFS...", fileName);
+      const ipfsResult = await uploadToIPFS(uploadedFile.path, fileName);
+
+      if (!ipfsResult.success) {
+        throw new Error(`IPFS upload failed for ${fileName}`);
+      }
+
+      const { ipfsHash, fileHash, gatewayUrl } = ipfsResult;
+
+      // 2. Register on blockchain
+      console.log("📝 Step 2: Registering on blockchain...", fileName);
+      const blockchainResult = await registerOnBlockchain(ipfsHash, fileHash);
+
+      let blockchainTxHash = null;
+      let blockchainConfirmed = false;
+
+      if (blockchainResult.success) {
+        blockchainTxHash = blockchainResult.transactionHash;
+        blockchainConfirmed = true;
+        console.log("✅ Blockchain registration complete");
+      } else {
+        console.warn(
+          "⚠️  Blockchain registration failed:",
+          blockchainResult.error,
+        );
+      }
+
+      // 3. Save to MongoDB
+      const evidence = await Evidence.create({
+        fileName: fileName,
+        fileType: uploadedFile.mimetype,
+        fileSize: uploadedFile.size,
+        ipfsHash: ipfsHash,
+        fileHash: fileHash,
+        blockchainTxHash: blockchainTxHash,
+        blockchainConfirmed: blockchainConfirmed,
+        uploader: req.user.id,
+        uploaderWallet: req.body.walletAddress || null,
+        caseId: req.body.caseId,
+        description: req.body.description,
+        tags: parsedTags,
+        metadata: {
+          evidenceTitle: metadata.evidenceTitle || "",
+          source: metadata.source || "",
+          incidentDate: metadata.incidentDate || null,
+          location: metadata.location || "",
+          dateCollected: metadata.dateCollected || null,
+          collectedBy: metadata.collectedBy || "",
+          deviceInfo: metadata.deviceInfo || "",
+          notes: metadata.notes || "",
         },
-      ],
-      // ... other fields
-    });
+        chainOfCustody: [
+          {
+            user: req.user.id,
+            userId: req.user.id,
+            userName: req.user.name,
+            userEmail: req.user.email,
+            action: "uploaded",
+            timestamp: new Date(),
+            ipAddress: req.ip || req.connection.remoteAddress,
+            userAgent: req.get("user-agent"),
+          },
+        ],
+      });
+
+      createdEvidence.push({
+        _id: evidence._id,
+        evidenceId: evidence.evidenceId,
+        ipfsHash: evidence.ipfsHash,
+        fileHash: evidence.fileHash,
+        blockchainTxHash: evidence.blockchainTxHash,
+        ipfsUrl: gatewayUrl,
+      });
+
+      caseRecord.evidence.push(evidence._id);
+    }
+
+    await caseRecord.save();
 
     // 4. Cleanup
-    if (uploadedFilePath && fs.existsSync(uploadedFilePath)) {
-      fs.unlinkSync(uploadedFilePath);
-    }
+    uploadedFilePaths.forEach((filePath) => {
+      if (filePath && fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    });
 
     // 5. Return response
     res.status(201).json({
       success: true,
       message: "Evidence uploaded successfully",
       data: {
-        evidence: {
-          _id: evidence._id,
-          evidenceId: evidence.evidenceId,
-          ipfsHash: evidence.ipfsHash,
-          fileHash: evidence.fileHash,
-          blockchainTxHash: evidence.blockchainTxHash,
-        },
-        ipfsUrl: gatewayUrl,
-        blockchainExplorer: blockchainTxHash
-          ? `https://amoy.polygonscan.com/tx/${blockchainTxHash}`
-          : null,
+        caseId: caseRecord._id,
+        filesCount: createdEvidence.length,
+        evidences: createdEvidence,
       },
     });
   } catch (error) {
     console.error("❌ Upload error:", error);
 
-    if (uploadedFilePath && fs.existsSync(uploadedFilePath)) {
-      fs.unlinkSync(uploadedFilePath);
-    }
+    uploadedFilePaths.forEach((filePath) => {
+      if (filePath && fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    });
 
-    res.status(500).json({
+    res.status(statusCode).json({
       success: false,
       message: "Error uploading evidence",
       error: error.message,
@@ -118,7 +216,14 @@ const uploadEvidence = async (req, res) => {
  */
 const getAllEvidence = async (req, res) => {
   try {
-    const evidence = await Evidence.find()
+    const { caseId } = req.query;
+    const filter = {};
+
+    if (caseId) {
+      filter.caseId = caseId;
+    }
+
+    const evidence = await Evidence.find(filter)
       .populate("uploader", "name email")
       .populate("caseId", "caseTitle");
 

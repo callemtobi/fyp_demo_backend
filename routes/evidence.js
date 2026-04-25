@@ -96,13 +96,11 @@ const upload = multer({
       "image/png",
       "image/gif",
       "image/webp",
+      "image/jpg",
       "application/pdf",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "text/plain",
       "video/mp4",
-      "video/mpeg",
-      "application/zip",
+      "video/webm",
+      "video/quicktime",
     ];
 
     // For now, allow all files (comment out to restrict)
@@ -114,7 +112,7 @@ const upload = multer({
     } else {
       cb(
         new Error(
-          "Invalid file type. Only images, PDFs, and documents allowed.",
+          "Invalid file type. Only images, PDFs, and videos are allowed.",
         ),
       );
     }
@@ -149,7 +147,7 @@ router.use(protect);
 // Upload route with file handling
 router.post(
   "/upload",
-  upload.single("file"),
+  upload.array("files", 10),
   handleMulterError,
   uploadEvidence,
 );

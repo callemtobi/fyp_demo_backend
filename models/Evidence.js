@@ -76,6 +76,17 @@ const evidenceSchema = new mongoose.Schema({
     },
   ],
   metadata: {
+    evidenceTitle: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+    },
+    source: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+    },
+    incidentDate: Date,
     location: String,
     dateCollected: Date,
     collectedBy: String,
@@ -94,7 +105,13 @@ const evidenceSchema = new mongoose.Schema({
       userEmail: String,
       action: {
         type: String,
-        enum: ["uploaded", "viewed", "downloaded", "transferred"],
+        enum: [
+          "uploaded",
+          "viewed",
+          "downloaded",
+          "transferred",
+          "blockchain-confirmed",
+        ],
         required: true,
       },
       timestamp: {

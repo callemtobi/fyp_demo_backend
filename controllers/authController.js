@@ -176,4 +176,28 @@ export const logout = async (req, res) => {
   }
 };
 
-export default { register, login, getUser, logout };
+/**
+ * Get all users for assignment lists
+ * GET /api/auth/users
+ */
+export const getUsers = async (req, res) => {
+  try {
+    const users = await User.find()
+      .select("_id username email role")
+      .sort({ username: 1 });
+
+    res.status(200).json({
+      success: true,
+      data: users,
+    });
+  } catch (error) {
+    console.error("Get users error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error getting users",
+      error: error.message,
+    });
+  }
+};
+
+export default { register, login, getUser, logout, getUsers };

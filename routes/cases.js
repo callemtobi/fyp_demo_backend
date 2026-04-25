@@ -48,7 +48,6 @@ export default router;
 
 // status - Filter by status (open, in-progress, closed, archived)
 // caseType - Filter by type (criminal, civil, corporate, cyber, other)
-// priority - Filter by priority (low, medium, high, critical)
 // search - Search in title, description, or case number
 // limit - Number of cases per page (default: 50)
 // page - Page number (default: 1)
