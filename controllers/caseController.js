@@ -797,6 +797,155 @@ function getTimeAgo(date) {
   return date.toLocaleDateString();
 }
 
+/**
+ * Compare two cases for similarities
+ * POST /api/cases/compare
+ */
+const compareCases = async (req, res) => {
+  try {
+    const { case1Id, case2Id } = req.body;
+
+    if (!case1Id || !case2Id) {
+      return res.status(400).json({
+        success: false,
+        message: "Both case1Id and case2Id are required",
+      });
+    }
+
+    if (case1Id === case2Id) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot compare a case with itself",
+      });
+    }
+
+    // Fetch both cases
+    const case1 = await Case.findById(case1Id).populate(
+      "assignedOfficer",
+      "username email",
+    );
+    const case2 = await Case.findById(case2Id).populate(
+      "assignedOfficer",
+      "username email",
+    );
+
+    if (!case1 || !case2) {
+      return res.status(404).json({
+        success: false,
+        message: "One or both cases not found",
+      });
+    }
+
+    // Get or generate case analysis summaries
+    let case1Summary = case1.caseAnalysisSummary?.caseSummary;
+    let case2Summary = case2.caseAnalysisSummary?.caseSummary;
+
+    // If summaries don't exist, generate them
+    if (!case1Summary) {
+      console.log("🔄 Generating case analysis summary for case 1...");
+      const { generateCaseAnalysisSummary } =
+        await import("../services/openaiService.js");
+      case1Summary = await generateCaseAnalysisSummary(case1.toObject());
+    }
+
+    if (!case2Summary) {
+      console.log("🔄 Generating case analysis summary for case 2...");
+      const { generateCaseAnalysisSummary } =
+        await import("../services/openaiService.js");
+      case2Summary = await generateCaseAnalysisSummary(case2.toObject());
+    }
+
+    // Compare the cases using OpenAI
+    const { compareCaseSummaries } =
+      await import("../services/openaiService.js");
+    const comparisonResult = await compareCaseSummaries(
+      case1,
+      case2,
+      case1Summary,
+      case2Summary,
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Cases compared successfully",
+      data: comparisonResult,
+    });
+  } catch (error) {
+    console.error("❌ Compare cases error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error comparing cases",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Download case comparison PDF
+ * POST /api/cases/comparison/download
+ */
+const downloadComparisonPDF = async (req, res) => {
+  try {
+    const { case1Id, case2Id, comparisonResult, similarityScore } = req.body;
+
+    if (
+      !case1Id ||
+      !case2Id ||
+      !comparisonResult ||
+      similarityScore === undefined
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required parameters for PDF generation",
+      });
+    }
+
+    // Fetch both cases
+    const case1 = await Case.findById(case1Id);
+    const case2 = await Case.findById(case2Id);
+
+    if (!case1 || !case2) {
+      return res.status(404).json({
+        success: false,
+        message: "One or both cases not found",
+      });
+    }
+
+    // Generate PDF
+    const { generateComparisonPDF } = await import("../services/pdfService.js");
+    const pdfPath = await generateComparisonPDF({
+      case1: {
+        id: case1._id,
+        caseNumber: case1.caseNumber,
+        title: case1.title,
+      },
+      case2: {
+        id: case2._id,
+        caseNumber: case2.caseNumber,
+        title: case2.title,
+      },
+      comparisonResult,
+      similarityScore,
+      generatedAt: new Date(),
+    });
+
+    // Send the file
+    const fileName = `comparison_${case1.caseNumber}_vs_${case2.caseNumber}.pdf`;
+    res.download(pdfPath, fileName, (err) => {
+      if (err) {
+        console.error("❌ Download error:", err);
+      }
+    });
+  } catch (error) {
+    console.error("❌ Download comparison PDF error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error generating PDF",
+      error: error.message,
+    });
+  }
+};
+
 export {
   createCase,
   getAllCases,
@@ -809,4 +958,6 @@ export {
   getCaseStats,
   getEvidenceUploadTrend,
   getRecentActivity,
+  compareCases,
+  downloadComparisonPDF,
 };

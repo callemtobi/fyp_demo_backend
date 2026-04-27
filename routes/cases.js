@@ -11,6 +11,8 @@ import {
   getCaseStats,
   getEvidenceUploadTrend,
   getRecentActivity,
+  compareCases,
+  downloadComparisonPDF,
 } from "../controllers/caseController.js";
 import { protect, authorize } from "../middleware/auth.js";
 
@@ -28,6 +30,12 @@ router.get("/dashboard/recent-activity", getRecentActivity);
 
 // Find similar cases - before /:id to avoid conflict
 router.get("/analyze/similar/:id", findSimilarCases);
+
+// Compare two cases
+router.post("/compare", compareCases);
+
+// Download comparison PDF
+router.post("/comparison/download", downloadComparisonPDF);
 
 // CRUD operations
 router.post("/", createCase);

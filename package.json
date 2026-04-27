@@ -24,6 +24,7 @@
     "multer": "^2.0.2",
     "openai": "^4.104.0",
     "pdf-parse": "^2.4.5",
+    "pdfkit": "^0.18.0",
     "pinata": "^2.5.5"
   },
   "devDependencies": {

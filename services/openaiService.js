@@ -209,7 +209,113 @@ export const generateEvidenceSummary = async (evidences) => {
   }
 };
 
+/**
+ * Compare two case summaries and identify similarities
+ * @param {Object} case1 - First case object with title, description, crime, victim, witness, suspect
+ * @param {Object} case2 - Second case object with title, description, crime, victim, witness, suspect
+ * @param {string} case1Summary - AI-generated summary of case 1
+ * @param {string} case2Summary - AI-generated summary of case 2
+ * @returns {Promise<Object>} - Comparison result with similarities and metrics
+ */
+export const compareCaseSummaries = async (
+  case1,
+  case2,
+  case1Summary,
+  case2Summary,
+) => {
+  try {
+    if (!OPENROUTER_API_KEY) {
+      throw new Error(
+        "OPENROUTER_API_KEY is not configured in environment variables",
+      );
+    }
+
+    const comparisonPrompt = `
+You are a forensic analyst expert. Compare the following two cases and identify similarities and connections.
+
+CASE 1: ${case1.title} (${case1.caseNumber})
+${case1Summary}
+
+CASE 2: ${case2.title} (${case2.caseNumber})
+${case2Summary}
+
+Please provide:
+1. Overall Similarity Assessment (0-100 percentage)
+2. Key Similarities Found
+3. Suspect/Person Connections
+4. Crime Pattern Similarities
+5. Location/Jurisdiction Connections
+6. Timeline Overlaps
+7. Victim/Witness Connections
+8. Evidence Correlation
+9. Risk Level Assessment (Low/Medium/High)
+10. Recommendations for Investigation
+
+Format the response in a structured way with clear sections and metrics.`;
+
+    const systemPrompt = `You are a highly skilled forensic analyst specializing in case comparison and investigation linkage.
+Your role is to identify connections, similarities, and patterns between cases that may indicate related crimes or investigations.
+Provide detailed analysis with confidence levels for each identified similarity.
+Be thorough but concise in your findings.`;
+
+    console.log(
+      "🔄 Comparing cases with OpenAI: " +
+        case1.caseNumber +
+        " vs " +
+        case2.caseNumber,
+    );
+
+    const completion = await openai.chat.completions.create({
+      model: "openai/gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt,
+        },
+        {
+          role: "user",
+          content: comparisonPrompt,
+        },
+      ],
+      temperature: 0.7,
+      max_tokens: 2500,
+    });
+
+    const comparisonResult = completion.choices[0]?.message?.content;
+
+    if (!comparisonResult) {
+      throw new Error("No comparison result generated from OpenAI API");
+    }
+
+    console.log("✅ Case comparison completed successfully");
+
+    // Extract similarity percentage from the response
+    const similarityMatch = comparisonResult.match(/(\d+)[\s]*(?:%|percent)/i);
+    const similarityScore = similarityMatch ? parseInt(similarityMatch[1]) : 0;
+
+    return {
+      comparisonResult,
+      similarityScore,
+      case1: {
+        id: case1._id,
+        caseNumber: case1.caseNumber,
+        title: case1.title,
+      },
+      case2: {
+        id: case2._id,
+        caseNumber: case2.caseNumber,
+        title: case2.title,
+      },
+      generatedAt: new Date(),
+    };
+  } catch (error) {
+    console.error("❌ Error comparing cases:", error.message);
+    throw error;
+  }
+};
+
 export default {
   generateCaseAnalysisSummary,
   generateEvidenceSummary,
+  compareCaseSummaries,
 };
