@@ -1,6 +1,6 @@
 import Case from "../models/Case.js";
 import Evidence from "../models/Evidence.js";
-// import { generateCaseAnalysisSummary } from "../services/openaiService.js";
+import { generateCaseAnalysisSummary } from "../services/openaiService.js";
 
 /**
  * Create a new case
@@ -90,18 +90,22 @@ const createCase = async (req, res) => {
     });
 
     // Generate AI analysis summary using OpenAI
-    // console.log("🔄 Generating case analysis summary with OpenAI...");
-    // const analysisSummary = await generateCaseAnalysisSummary(
-    //   newCase.toObject(),
-    // );
-    // if (analysisSummary) {
-    //   newCase.caseAnalysisSummary = analysisSummary;
-    //   console.log("✅ Case analysis summary generated and stored");
-    // } else {
-    //   console.log(
-    //     "⚠️ Failed to generate case analysis summary, continuing without it",
-    //   );
-    // }
+    console.log("🔄 Generating case analysis summary with OpenAI...");
+    const analysisSummary = await generateCaseAnalysisSummary(
+      newCase.toObject(),
+    );
+    if (analysisSummary) {
+      newCase.caseAnalysisSummary = {
+        caseSummary: analysisSummary,
+        evidenceSummary: null,
+        lastUpdated: new Date(),
+      };
+      console.log("✅ Case analysis summary generated and stored");
+    } else {
+      console.log(
+        "⚠️ Failed to generate case analysis summary, continuing without it",
+      );
+    }
 
     await newCase.save();
 

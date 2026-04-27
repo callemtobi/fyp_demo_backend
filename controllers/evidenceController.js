@@ -2,6 +2,8 @@ import Evidence from "../models/Evidence.js";
 import Case from "../models/Case.js";
 import { uploadToIPFS } from "../services/ipfsService.js";
 import { registerEvidence as registerOnBlockchain } from "../services/blockchainService.js";
+import { processEvidenceFile } from "../services/fileProcessingService.js";
+import { generateEvidenceSummary } from "../services/openaiService.js";
 import fs from "fs";
 
 /**
@@ -125,7 +127,15 @@ const uploadEvidence = async (req, res) => {
         );
       }
 
-      // 3. Save to MongoDB
+      // 3. Process file content (Extract PDF text / Generate image captions)
+      console.log("🔄 Step 3: Processing file content...", fileName);
+      const processingResult = await processEvidenceFile(
+        uploadedFile.path,
+        uploadedFile.mimetype,
+        req.body.description || "",
+      );
+
+      // 4. Save to MongoDB
       const evidence = await Evidence.create({
         fileName: fileName,
         fileType: uploadedFile.mimetype,
@@ -149,6 +159,10 @@ const uploadEvidence = async (req, res) => {
           deviceInfo: metadata.deviceInfo || "",
           notes: metadata.notes || "",
         },
+        // AI-Generated Content
+        pdfText: processingResult.pdfText,
+        imageCaption: processingResult.imageCaption,
+        aiProcessingStatus: processingResult.aiProcessingStatus,
         chainOfCustody: [
           {
             user: req.user.id,
@@ -177,14 +191,43 @@ const uploadEvidence = async (req, res) => {
 
     await caseRecord.save();
 
-    // 4. Cleanup
+    // 5. Cleanup
     uploadedFilePaths.forEach((filePath) => {
       if (filePath && fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
     });
 
-    // 5. Return response
+    // 5.5. Generate evidence summary using OpenAI
+    console.log("🔄 Step 5.5: Generating evidence summary with OpenAI...");
+    try {
+      // Fetch all evidence for the case with all fields
+      const allEvidences = await Evidence.find(
+        { caseId: req.body.caseId },
+        "fileName fileType pdfText imageCaption",
+      );
+
+      if (allEvidences.length > 0) {
+        const evidenceSummary = await generateEvidenceSummary(allEvidences);
+        if (evidenceSummary) {
+          caseRecord.caseAnalysisSummary = {
+            ...caseRecord.caseAnalysisSummary,
+            evidenceSummary: evidenceSummary,
+            lastUpdated: new Date(),
+          };
+          await caseRecord.save();
+          console.log("✅ Evidence summary generated and stored");
+        }
+      }
+    } catch (summaryError) {
+      console.warn(
+        "⚠️ Failed to generate evidence summary:",
+        summaryError.message,
+      );
+      // Don't fail the upload if summary generation fails
+    }
+
+    // 6. Return response
     res.status(201).json({
       success: true,
       message: "Evidence uploaded successfully",

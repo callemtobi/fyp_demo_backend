@@ -23,6 +23,7 @@
     "mongoose": "^9.2.0",
     "multer": "^2.0.2",
     "openai": "^4.104.0",
+    "pdf-parse": "^2.4.5",
     "pinata": "^2.5.5"
   },
   "devDependencies": {

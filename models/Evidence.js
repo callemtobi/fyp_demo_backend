@@ -93,6 +93,22 @@ const evidenceSchema = new mongoose.Schema({
     deviceInfo: String,
     notes: String,
   },
+  // AI-Generated Content
+  pdfText: {
+    type: String,
+    default: null,
+    // Extracted text from PDF files
+  },
+  imageCaption: {
+    type: String,
+    default: null,
+    // AI-generated caption for image files
+  },
+  aiProcessingStatus: {
+    type: String,
+    enum: ["pending", "processing", "completed", "failed"],
+    default: "pending",
+  },
   chainOfCustody: [
     {
       user: {

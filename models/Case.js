@@ -125,8 +125,18 @@ const caseSchema = new mongoose.Schema({
 
   // AI Analysis Summary
   caseAnalysisSummary: {
-    type: String,
-    default: null,
+    caseSummary: {
+      type: String,
+      default: null,
+    },
+    evidenceSummary: {
+      type: String,
+      default: null,
+    },
+    lastUpdated: {
+      type: Date,
+      default: null,
+    },
   },
 
   // Timestamps
