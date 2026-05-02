@@ -728,6 +728,7 @@ const getRecentActivity = async (req, res) => {
     // Get recent evidence uploads (last 10)
     const recentEvidence = await Evidence.find()
       .populate("uploader", "username")
+      .populate("caseId", "title _id")
       .sort({ createdAt: -1 })
       .limit(10);
 
@@ -740,6 +741,7 @@ const getRecentActivity = async (req, res) => {
     // Format evidence uploads as activities
     recentEvidence.forEach((evidence) => {
       const timeAgo = getTimeAgo(evidence.createdAt);
+      const caseName = evidence.caseId?.title || "Unknown Case";
       activities.push({
         id: evidence.evidenceId,
         action: "Evidence Uploaded",
@@ -747,19 +749,24 @@ const getRecentActivity = async (req, res) => {
         time: timeAgo,
         timestamp: evidence.createdAt,
         type: "evidence",
+        caseName: caseName,
+        caseId: evidence.caseId?._id,
       });
     });
 
     // Format case updates as activities
     recentCases.forEach((caseItem) => {
       const timeAgo = getTimeAgo(caseItem.updatedAt);
+      const actionLabel =
+        caseItem.status === "closed" ? "Case Closed" : "Case Updated";
       activities.push({
         id: caseItem.caseNumber,
-        action: `Case ${caseItem.status === "closed" ? "Closed" : "Updated"}`,
-        user: "System",
+        action: actionLabel,
+        user: caseItem.title,
         time: timeAgo,
         timestamp: caseItem.updatedAt,
         type: "case",
+        caseId: caseItem._id,
       });
     });
 

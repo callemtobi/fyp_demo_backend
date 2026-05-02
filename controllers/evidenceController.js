@@ -268,7 +268,7 @@ const getAllEvidence = async (req, res) => {
 
     const evidence = await Evidence.find(filter)
       .populate("uploader", "name email")
-      .populate("caseId", "caseTitle");
+      .populate("caseId", "title caseNumber");
 
     res.status(200).json({
       success: true,
@@ -664,7 +664,7 @@ const getChainOfCustody = async (req, res) => {
 
     const evidence = await Evidence.findById(id)
       .populate("uploader", "name email _id")
-      .populate("caseId", "caseTitle _id")
+      .populate("caseId", "caseNumber title _id")
       .populate("chainOfCustody.user", "name email _id")
       .lean();
 
@@ -699,6 +699,9 @@ const getChainOfCustody = async (req, res) => {
         fileHash: evidence.fileHash,
         uploader: evidence.uploader,
         caseId: evidence.caseId,
+        description: evidence.description,
+        imageCaption: evidence.imageCaption,
+        metadata: evidence.metadata,
         createdAt: evidence.createdAt,
         blockchainTxHash: evidence.blockchainTxHash,
         blockchainConfirmed: evidence.blockchainConfirmed,
