@@ -4,20 +4,24 @@ import {
   logReportGeneration,
   getRecentReports,
 } from "../controllers/reportController.js";
-import { protect } from "../middleware/auth.js";
+import { protect, authorize } from "../middleware/auth.js";
 
 const router = express.Router();
 
 // All routes require authentication
 router.use(protect);
 
-// Get case details by ID
+// Get case details by ID - all roles can access
 router.get("/case/:id", getCaseDetailsForReport);
 
-// Log report generation
-router.post("/log", logReportGeneration);
+// Log report generation - Only Investigator and Forensic Analyst
+router.post(
+  "/log",
+  authorize("Investigator", "Forensic Analyst"),
+  logReportGeneration,
+);
 
-// Get recent reports
+// Get recent reports - all roles
 router.get("/recent", getRecentReports);
 
 export default router;

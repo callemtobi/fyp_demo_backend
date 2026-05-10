@@ -25,10 +25,14 @@ const userSchema = new mongoose.Schema({
   role: {
     type: String,
     enum: [
-      "Student Investigator",
-      "Student Analyst",
-      "Project Admin",
-      "Supervisor",
+      "Investigator",
+      "Forensic Analyst",
+      "Police Officer",
+      "Judge",
+      // "Student Investigator",
+      // "Student Analyst",
+      // "Project Admin",
+      // "Supervisor",
     ],
     // default: "Student Investigator",
   },

@@ -21,31 +21,47 @@ const router = express.Router();
 // All routes require authentication
 router.use(protect);
 
-// Case statistics - before /:id to avoid conflict
+// Case statistics - before /:id to avoid conflict (all roles can view)
 router.get("/stats", getCaseStats);
 
-// Dashboard data routes
+// Dashboard data routes (all roles can view)
 router.get("/dashboard/evidence-trend", getEvidenceUploadTrend);
 router.get("/dashboard/recent-activity", getRecentActivity);
 
-// Find similar cases - before /:id to avoid conflict
+// Find similar cases - before /:id to avoid conflict (all roles can view)
 router.get("/analyze/similar/:id", findSimilarCases);
 
-// Compare two cases
+// Compare two cases (all roles can view)
 router.post("/compare", compareCases);
 
-// Download comparison PDF
+// Download comparison PDF (all roles can download)
 router.post("/comparison/download", downloadComparisonPDF);
 
 // CRUD operations
-router.post("/", createCase);
+// Create case: Only Investigator and Police Officer
+router.post("/", authorize("Investigator", "Police Officer"), createCase);
+
+// View all cases (all roles can view)
 router.get("/", getAllCases);
+
+// View specific case (all roles can view)
 router.get("/:id", getCaseById);
-router.put("/:id", updateCase);
+
+// Update case: Only Investigator and Police Officer
+router.put("/:id", authorize("Investigator", "Police Officer"), updateCase);
 
 // Case actions
-router.put("/:id/close", closeCase);
+// Close case: Only Investigator and Police Officer
+router.put(
+  "/:id/close",
+  authorize("Investigator", "Police Officer"),
+  closeCase,
+);
+
+// Add timeline entry: All roles can add
 router.post("/:id/timeline", addTimelineEntry);
+
+// Link evidence: All roles can link
 router.post("/:id/evidence/:evidenceId", linkEvidence);
 
 export default router;

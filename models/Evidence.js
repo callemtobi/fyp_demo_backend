@@ -54,10 +54,10 @@ const evidenceSchema = new mongoose.Schema({
     ref: "User",
     required: true,
   },
-  uploaderWallet: {
-    type: String,
-    required: false,
-  },
+  // uploaderWallet: {
+  //   type: String,
+  //   required: false,
+  // },
   caseId: {
     type: mongoose.Schema.Types.ObjectId,
     // type: String,

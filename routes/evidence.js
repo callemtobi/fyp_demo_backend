@@ -3,7 +3,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 // import { uploadEvidence } from "../controllers/evidenceController.js";
-import { protect } from "../middleware/auth.js";
+import { protect, authorize } from "../middleware/auth.js";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 
@@ -144,22 +144,31 @@ const handleMulterError = (err, req, res, next) => {
 // All routes are protected
 router.use(protect);
 
-// Upload route with file handling
+// Upload route with file handling - Only Investigator, Police Officer, and Forensic Analyst
 router.post(
   "/upload",
+  authorize("Investigator", "Police Officer", "Forensic Analyst"),
   upload.array("files", 10),
   handleMulterError,
   uploadEvidence,
 );
 
-// Other routes
+// View all evidence - all roles
 router.get("/", getAllEvidence);
+
+// View specific evidence - all roles
 router.get("/:id", getEvidenceById);
+
+// Download evidence - all roles
 router.get("/:id/download", downloadEvidence);
+
+// Update blockchain hash - all roles
 router.put("/:id/blockchain", updateBlockchainHash);
+
+// Confirm blockchain transaction - all roles
 router.post("/:id/confirm-blockchain", confirmBlockchainTransaction);
 
-// Chain of Custody routes
+// Chain of Custody routes - all roles
 router.post("/:id/track-view", trackEvidenceView);
 router.post("/:id/track-download", trackEvidenceDownload);
 router.get("/:id/chain-of-custody", getChainOfCustody);

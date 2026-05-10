@@ -200,7 +200,7 @@ const getAllCases = async (req, res) => {
 const getCaseById = async (req, res) => {
   try {
     const caseData = await Case.findById(req.params.id)
-      .populate("assignedOfficer", "username email role walletAddress")
+      .populate("assignedOfficer", "username email role")
       .populate({
         path: "evidence",
         select:

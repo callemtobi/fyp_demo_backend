@@ -7,7 +7,7 @@ import { generateToken } from "../middleware/auth.js";
  */
 export const register = async (req, res) => {
   try {
-    const { username, email, password, role, walletAddress } = req.body;
+    const { username, email, password, role } = req.body;
 
     // Check if user already exists
     const userExists = await User.findOne({ $or: [{ email }, { username }] });
@@ -25,7 +25,7 @@ export const register = async (req, res) => {
       email,
       password,
       role: role || "investigator",
-      walletAddress,
+      // walletAddress,
     });
 
     // Generate token
@@ -108,7 +108,7 @@ export const login = async (req, res) => {
         username: user.username,
         email: user.email,
         role: user.role,
-        walletAddress: user.walletAddress,
+        // walletAddress: user.walletAddress,
       },
       token,
       // },
